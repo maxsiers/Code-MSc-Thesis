@@ -1,0 +1,1214 @@
+---
+title: "MScThesis_v5"
+author: "Max Siers"
+date: "8/13/2022"
+output: pdf_document
+---
+##Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+```
+
+To remove all the objects that are stored in global environment:
+
+```{r}
+if(!is.null(dev.list())) dev.off()
+cat("\014") 
+rm(list = ls())
+```
+
+```{r, warning=FALSE, message=FALSE, include=FALSE}
+library(tidyverse)
+library(ggdag)
+library(dplyr)
+library(tinytex)
+library(jtools)
+library(huxtable)
+library(ggstance)
+library(knitr)
+library(lemon)
+library(lubridate)
+library(ggplot2)
+library(coefplot)
+library(stargazer)
+library(dagitty)
+library("readxl")
+library(tidyr)
+library(brms)         # Bayesian modeling through Stan
+library(tidybayes)    # Manipulate Stan objects in a tidy way
+library(broom)        # Convert model objects to data frames
+library(broom.mixed)  # Convert brms model objects to data frames
+library(emmeans)      # Calculate marginal effects in even fancier ways
+library(ggrepel)      # For nice non-overlapping labels in ggplot
+library(ggdist)       # For distribution-related ggplot geoms
+library(patchwork)    # For combining plots
+library(ggokabeito)   # For ggplot
+library(gridExtra)
+library(Hmisc)
+library(tidybayes)
+library(summarytools)
+library(MatchIt)
+```
+
+##Import datasets, clean data
+
+*Import dataset EU*
+
+```{r}
+#Due to size limitations of Morningstar Direct, the data is distributed over multiple datasets.
+my_data1 <- read_excel("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis RMD bestaden en data/Thesis data/data-3/EU_set1_v3.xlsx")
+my_data2 <- read_excel("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis RMD bestaden en data/Thesis data/data-3/EU_set2_v3.xlsx")
+my_data3 <- read_excel("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis RMD bestaden en data/Thesis data/data-3/EU_set3_v3.xlsx")
+```
+
+```{r}
+#Create one dataframe containing raw data of EU
+EUdataset1 <- rbind(my_data1, my_data2, my_data3)
+```
+
+```{r}
+#Correct Europe for European Union
+EUdataset1 <- subset(EUdataset1,Domicile=='Austria'|Domicile=='Belgium'|Domicile=='Bulgaria'|Domicile=='Croatia'|Domicile=='Cyprus'|Domicile=='Czechia'|Domicile=='Denmark'|Domicile=='Estonia'|Domicile=='Finland'|Domicile=='France'|Domicile=='Germany'|Domicile=='Greece'|Domicile=='Hungary'|Domicile=='Ireland'|Domicile=='Italy'|Domicile=='Latvia'|Domicile=='Lithuania'|Domicile=='Luxembourg'|Domicile=='Malta'|Domicile=='Netherlands'|Domicile=='Poland'|Domicile=='Portugal'|Domicile=='Romania'|Domicile=='Slovakia'|Domicile=='Slovenia'|Domicile=='Spain'|Domicile=='Sweden')
+```
+
+```{r}
+#Save as RDS file
+saveRDS(EUdataset1, file = "EUdataset1.RDS") 
+```
+
+*Import US dataset*
+
+```{r}
+USdataset <- read_excel("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis RMD bestaden en data/Thesis data/data-3/US_set1_v3.xlsx")
+```
+
+```{r}
+#Save as RDS file
+saveRDS(USdataset, file = "USdataset.RDS") 
+```
+
+*Cleaning data*
+
+```{r}
+EUsubset1=EUdataset1
+EUsubset1 = subset(EUsubset1, select = -c(1,3))
+```
+
+```{r}
+USsubset1=USdataset
+USsubset1 = subset(USsubset1, select = -c(1,3))
+```
+
+**Change data from wide to long**
+  
+For some variables I have information over different months. The data is provided in a wide format by Morningstar Direct. I therefore have to transform it to a panel dataset.
+  
+```{r}
+#Divide the sample into three, each containing 1 of the 3 variables with multiple periods
+EUsubset1A = subset(EUsubset1, select = c(1:55))
+EUsubset1B = subset(EUsubset1, select = c(1,56:108))
+EUsubset1C = subset(EUsubset1, select = c(1,109:161))
+EUsubset1D = subset(EUsubset1, select = c(1,162:214))
+
+#Same for the US
+USsubset1A = subset(USsubset1, select = c(1,2,56:108))
+USsubset1B = subset(USsubset1, select = c(1,3:55))
+USsubset1C = subset(USsubset1, select = c(1,109:161))
+USsubset1D = subset(USsubset1, select = c(1,162:214))
+```
+
+```{r}
+#In each subset transfrom the wide format to a long format
+data_long1A <- gather(EUsubset1A, month, ESGvalue, `Morningstar Sustainability Rating™ 2018-01`: `Morningstar Sustainability Rating™ 2022-05`, factor_key = TRUE)
+data_long1B <- gather(EUsubset1B, month, FundSize, `Fund Size - comprehensive (Monthly) 2018-01 USD`: `Fund Size - comprehensive (Monthly) 2022-05 USD`, factor_key = TRUE)
+data_long1C <- gather(EUsubset1C, month, TNAvalue, `Net Assets - share class (Monthly) 2018-01 USD`: `Net Assets - share class (Monthly) 2022-05 USD`, factor_key = TRUE)
+data_long1D <- gather(EUsubset1D, month, RETvalue, `Monthly Gross Return 2018-01 USD`: `Monthly Gross Return 2022-05 USD`, factor_key = TRUE)
+
+#Same for the US
+dataUS_long1A <- gather(USsubset1A, month, FundSize, `Fund Size - comprehensive (Monthly) 2018-01 USD`: `Fund Size - comprehensive (Monthly) 2022-05 USD`, factor_key = TRUE)
+dataUS_long1B <- gather(USsubset1B, month, ESGvalue, `Morningstar Sustainability Rating™ 2018-01`: `Morningstar Sustainability Rating™ 2022-05`, factor_key = TRUE)
+dataUS_long1C <- gather(USsubset1C, month, RETvalue, `Monthly Gross Return 2018-01 USD`: `Monthly Gross Return 2022-05 USD`, factor_key = TRUE)
+dataUS_long1D <- gather(USsubset1D, month, TNAvalue, `Net Assets - share class (Monthly) 2018-01 USD`: `Net Assets - share class (Monthly) 2022-05 USD`, factor_key = TRUE)
+```
+
+```{r}
+#Change datatype of the column month
+data_long1A$month <- as.character(data_long1A$month)
+data_long1B$month <- as.character(data_long1B$month)
+data_long1C$month <- as.character(data_long1C$month)
+data_long1D$month <- as.character(data_long1D$month)
+
+#same for the US
+dataUS_long1A$month <- as.character(dataUS_long1A$month)
+dataUS_long1B$month <- as.character(dataUS_long1B$month)
+dataUS_long1C$month <- as.character(dataUS_long1C$month)
+dataUS_long1D$month <- as.character(dataUS_long1D$month)
+```
+
+
+```{r}
+#Collect dates from string
+data_long1A$month <- str_sub(data_long1A$month, start = -7)
+data_long1A$Month <- str_sub(data_long1A$month, start = -2)
+data_long1A$Year <- str_sub(data_long1A$month, 1, 4)
+data_long1A = subset(data_long1A, select = -(`month`))
+
+data_long1B$month <- str_sub(data_long1B$month, 37, 43)
+data_long1B$Month <- str_sub(data_long1B$month, start = -2)
+data_long1B$Year <- str_sub(data_long1B$month, 1, 4)
+data_long1B = subset(data_long1B, select = -(`month`))
+
+data_long1C$month <- str_sub(data_long1C$month, 36, 42)
+data_long1C$Month <- str_sub(data_long1C$month, start = -2)
+data_long1C$Year <- str_sub(data_long1C$month, 1, 4)
+data_long1C = subset(data_long1C, select = -(`month`))
+
+data_long1D$month <- str_sub(data_long1D$month, 22, 28)
+data_long1D$Month <- str_sub(data_long1D$month, start = -2)
+data_long1D$Year <- str_sub(data_long1D$month, 1, 4)
+data_long1D = subset(data_long1D, select = -(`month`))
+
+
+#same for the US
+
+dataUS_long1A$month <- str_sub(dataUS_long1A$month, 37, 43)
+dataUS_long1A$Month <- str_sub(dataUS_long1A$month, start = -2)
+dataUS_long1A$Year <- str_sub(dataUS_long1A$month, 1, 4)
+dataUS_long1A = subset(dataUS_long1A, select = -(`month`))
+
+dataUS_long1B$month <- str_sub(dataUS_long1B$month, start = -7)
+dataUS_long1B$Month <- str_sub(dataUS_long1B$month, start = -2)
+dataUS_long1B$Year <- str_sub(dataUS_long1B$month, 1, 4)
+dataUS_long1B = subset(dataUS_long1B, select = -(`month`))
+
+dataUS_long1C$month <- str_sub(dataUS_long1C$month, 22, 28)
+dataUS_long1C$Month <- str_sub(dataUS_long1C$month, start = -2)
+dataUS_long1C$Year <- str_sub(dataUS_long1C$month, 1, 4)
+dataUS_long1C = subset(dataUS_long1C, select = -(`month`))
+
+dataUS_long1D$month <- str_sub(dataUS_long1D$month, 36, 42)
+dataUS_long1D$Month <- str_sub(dataUS_long1D$month, start = -2)
+dataUS_long1D$Year <- str_sub(dataUS_long1D$month, 1, 4)
+dataUS_long1D = subset(dataUS_long1D, select = -(`month`))
+```
+
+```{r}
+# create date variables
+data_long1A$Day<-28
+data_long1A$Day <- as.factor(data_long1A$Day)
+data_long1A$Date<-as.Date(with(data_long1A,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+
+data_long1B$Day<-28
+data_long1B$Day <- as.factor(data_long1B$Day)
+data_long1B$Date<-as.Date(with(data_long1B,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+data_long1B = subset(data_long1B, select = -(`Month`))
+data_long1B = subset(data_long1B, select = -(`Year`))
+data_long1B = subset(data_long1B, select = -(`Day`))
+
+data_long1C$Day<-28
+data_long1C$Day <- as.factor(data_long1C$Day)
+data_long1C$Date<-as.Date(with(data_long1C,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+data_long1C = subset(data_long1C, select = -(`Month`))
+data_long1C = subset(data_long1C, select = -(`Year`))
+data_long1C = subset(data_long1C, select = -(`Day`))
+
+data_long1D$Day<-28
+data_long1D$Day <- as.factor(data_long1D$Day)
+data_long1D$Date<-as.Date(with(data_long1D,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+data_long1D = subset(data_long1D, select = -(`Month`))
+data_long1D = subset(data_long1D, select = -(`Year`))
+data_long1D = subset(data_long1D, select = -(`Day`))
+
+# Same for the US
+dataUS_long1A$Day<-28
+dataUS_long1A$Day <- as.factor(dataUS_long1A$Day)
+dataUS_long1A$Date<-as.Date(with(dataUS_long1A,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+
+dataUS_long1B$Day<-28
+dataUS_long1B$Day <- as.factor(dataUS_long1B$Day)
+dataUS_long1B$Date<-as.Date(with(dataUS_long1B,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+dataUS_long1B = subset(dataUS_long1B, select = -(`Month`))
+dataUS_long1B = subset(dataUS_long1B, select = -(`Year`))
+dataUS_long1B = subset(dataUS_long1B, select = -(`Day`))
+
+dataUS_long1C$Day<-28
+dataUS_long1C$Day <- as.factor(dataUS_long1C$Day)
+dataUS_long1C$Date<-as.Date(with(dataUS_long1C,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+dataUS_long1C = subset(dataUS_long1C, select = -(`Month`))
+dataUS_long1C = subset(dataUS_long1C, select = -(`Year`))
+dataUS_long1C = subset(dataUS_long1C, select = -(`Day`))
+
+dataUS_long1D$Day<-28
+dataUS_long1D$Day <- as.factor(dataUS_long1D$Day)
+dataUS_long1D$Date<-as.Date(with(dataUS_long1D,paste(Year,Month,Day, sep="-")),format = "%Y-%m-%d")
+dataUS_long1D = subset(dataUS_long1D, select = -(`Month`))
+dataUS_long1D = subset(dataUS_long1D, select = -(`Year`))
+dataUS_long1D = subset(dataUS_long1D, select = -(`Day`))
+```
+
+```{r}
+#Only keep relevant data frames in my environment
+remove(my_data3, my_data2, my_data1, EUsubset1A, EUsubset1B, EUsubset1C, subset2, USsubset1, USdataset, USsubset1C, USsubset1A, USsubset1B, my_usdata1, EUsubset1, EUdataset1, EUsubset1D, USsubset1D)
+```
+
+```{r}
+#Only keep relevant data in datasets
+data_long1A <- data_long1A[data_long1A$Date != '2018-01-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-02-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-03-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-04-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-05-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-06-28',]
+data_long1A <- data_long1A[data_long1A$Date != '2018-07-28',]
+
+data_long1B <- data_long1B[data_long1B$Date != '2018-01-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-02-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-03-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-04-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-05-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-06-28',]
+data_long1B <- data_long1B[data_long1B$Date != '2018-07-28',]
+
+data_long1C <- data_long1C[data_long1C$Date != '2018-01-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-02-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-03-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-04-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-05-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-06-28',]
+data_long1C <- data_long1C[data_long1C$Date != '2018-07-28',]
+
+data_long1D <- data_long1D[data_long1D$Date != '2018-01-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-02-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-03-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-04-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-05-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-06-28',]
+data_long1D <- data_long1D[data_long1D$Date != '2018-07-28',]
+
+#Same for the US
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-01-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-02-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-03-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-04-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-05-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-06-28',]
+dataUS_long1A <- dataUS_long1A[dataUS_long1A$Date != '2018-07-28',]
+
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-01-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-02-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-03-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-04-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-05-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-06-28',]
+dataUS_long1B <- dataUS_long1B[dataUS_long1B$Date != '2018-07-28',]
+
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-01-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-02-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-03-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-04-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-05-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-06-28',]
+dataUS_long1C <- dataUS_long1C[dataUS_long1C$Date != '2018-07-28',]
+
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-01-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-02-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-03-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-04-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-05-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-06-28',]
+dataUS_long1D <- dataUS_long1D[dataUS_long1D$Date != '2018-07-28',]
+```
+
+
+```{r}
+#When merging there were duplicates that caused an increase in the number of rows. I will remove these:
+
+#Create a unique identifier that has both the ISIN code and date
+data_long1A$duplicate <- paste(data_long1A$ISIN, data_long1A$Date, sep="_")
+data_long1B$duplicate <- paste(data_long1B$ISIN, data_long1B$Date, sep="_")
+data_long1C$duplicate <- paste(data_long1C$ISIN, data_long1C$Date, sep="_")
+data_long1D$duplicate <- paste(data_long1D$ISIN, data_long1D$Date, sep="_")
+
+# remove duplicate rows with dplyr
+data_long1A <- data_long1A %>% 
+                  # Base the removal on the "duplicate" column
+                  distinct(duplicate, .keep_all = TRUE)
+data_long1A = subset(data_long1A, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+data_long1B <- data_long1B %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+data_long1B = subset(data_long1B, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+data_long1C <- data_long1C %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+data_long1C = subset(data_long1C, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+data_long1D <- data_long1D %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+data_long1D = subset(data_long1D, select = -(`duplicate`))
+
+#Create one dataset that contains all the information in a long format
+data_long <- merge(data_long1A, data_long1B, by=c('ISIN', 'Date'))
+data_long <- merge(data_long, data_long1C, by=c('ISIN', 'Date'))
+data_long <- merge(data_long, data_long1D, by=c('ISIN', 'Date'))
+```
+
+
+```{r}
+#Same for the US
+#Create a unique identifier that has both the ISIN code and date
+dataUS_long1A$duplicate <- paste(dataUS_long1A$ISIN, dataUS_long1A$Date, sep="_")
+dataUS_long1B$duplicate <- paste(dataUS_long1B$ISIN, dataUS_long1B$Date, sep="_")
+dataUS_long1C$duplicate <- paste(dataUS_long1C$ISIN, dataUS_long1C$Date, sep="_")
+dataUS_long1D$duplicate <- paste(dataUS_long1D$ISIN, dataUS_long1D$Date, sep="_")
+
+# remove duplicate rows with dplyr
+dataUS_long1A <- dataUS_long1A %>% 
+                  # Base the removal on the "duplicate" column
+                  distinct(duplicate, .keep_all = TRUE)
+dataUS_long1A = subset(dataUS_long1A, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+dataUS_long1B <- dataUS_long1B %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+dataUS_long1B = subset(dataUS_long1B, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+dataUS_long1C <- dataUS_long1C %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+dataUS_long1C = subset(dataUS_long1C, select = -(`duplicate`))
+# remove duplicate rows with dplyr
+dataUS_long1D <- dataUS_long1D %>% 
+                  # Base the removal on the "Age" column
+                  distinct(duplicate, .keep_all = TRUE)
+dataUS_long1D = subset(dataUS_long1D, select = -(`duplicate`))
+
+#Create one dataset that contains all the information in a long format
+dataUS_long <- merge(dataUS_long1A, dataUS_long1B, by=c('ISIN', 'Date'))
+dataUS_long <- merge(dataUS_long, dataUS_long1C, by=c('ISIN', 'Date'))
+dataUS_long <- merge(dataUS_long, dataUS_long1D, by=c('ISIN', 'Date'))
+```
+
+**Combine both datasets**
+
+```{r}
+#Create Treatment dummy (EU)
+data_long$EU <- 1
+dataUS_long$EU <- 0
+
+#Combine both files
+data_long_total <- rbind(data_long, dataUS_long)
+```
+
+**Continue with cleaning data**
+
+```{r}
+#Turn ESG & month into a number score into a number
+data_long_total["ESGvalue"][data_long_total["ESGvalue"]=="Low"] <- "1" 
+data_long_total["ESGvalue"][data_long_total["ESGvalue"]=="Below Average"] <- "2"
+data_long_total["ESGvalue"][data_long_total["ESGvalue"]=="Average"] <- "3"
+data_long_total["ESGvalue"][data_long_total["ESGvalue"]=="Above Average"] <- "4"
+data_long_total["ESGvalue"][data_long_total["ESGvalue"]=="High"] <- "5"
+```
+
+```{r}
+#inception date -> months since inception
+data_long_total$`Inception Date` <- as.Date(data_long_total$`Inception Date`, format = "%Y-%m-%d")
+data_long_total$current_date <- (data_long_total$current_date = '2019-06-01')
+data_long_total$current_date <- as.Date(data_long_total$current_date, format = "%Y-%m-%d")
+
+data_long_total$age = as.numeric(difftime(data_long_total$current_date,data_long_total$`Inception Date`, units = "days" ))/(365.25/12)
+
+data_long_total$Age = as.numeric(difftime(data_long_total$Date,data_long_total$`Inception Date`, units = "days" ))/(365.25/12)
+
+data_long_total = subset(data_long_total, select=-c(current_date,`Inception Date`))
+
+```
+
+**Filter out funds with inception date after start & years 2021 & 2022**
+
+```{r}
+data_long_total <- data_long_total[data_long_total$age >0,]
+data_long_total <- data_long_total[data_long_total$Age >0,]
+
+data_long_total <- data_long_total[data_long_total$Year !=2022,]
+data_long_total <- data_long_total[data_long_total$Year !=2021,]
+```
+
+
+**Create dichotomous variable that denotes period before and after intervention.**
+
+```{r}
+data_long_total$treatment <- ifelse(data_long_total$Year =='2019' & data_long_total$Month =="12" | data_long_total$Year == "2020", 1, 0)
+
+data_long_total$anticipation <- ifelse( data_long_total$Year =='2019' & data_long_total$Month =="11" | data_long_total$Year =='2019' & data_long_total$Month =="10" | data_long_total$Year =='2019' & data_long_total$Month =="09" | data_long_total$Year =='2019' & data_long_total$Month =="08" | data_long_total$Year =='2019' & data_long_total$Month =="07"| data_long_total$Year =='2019' & data_long_total$Month =='06', 1, 0)
+
+data_long_total$treatment1 <- ifelse(data_long_total$Year =='2019' & data_long_total$Month =='12'| data_long_total$Year == '2020' & data_long_total$Month =='01' | data_long_total$Year == '2020' & data_long_total$Month =='02'| data_long_total$Year == '2020' & data_long_total$Month =='03'| data_long_total$Year == '2020' & data_long_total$Month =='04' | data_long_total$Year == '2020' & data_long_total$Month =='05', 1, 0)
+
+data_long_total$treatment2 <- ifelse(data_long_total$Year == "2020" & data_long_total$Month =="06" | data_long_total$Year == "2020" & data_long_total$Month =="07"| data_long_total$Year == "2020" & data_long_total$Month =="08"| data_long_total$Year == "2020" & data_long_total$Month =="09" | data_long_total$Year == "2020" & data_long_total$Month =="10" | data_long_total$Year == "2020" & data_long_total$Month =="11" | data_long_total$Year == "2020" & data_long_total$Month =="12", 1, 0)
+```
+
+```{r}
+total <- data_long_total
+```
+
+```{r}
+#Only keep relevant data frames in my environment
+remove(data_long1A, data_long1B, data_long1C, dataUS_long, dataUS_long1A, dataUS_long1B, dataUS_long1C, data_long_total, data_long, data_long1D, dataUS_long1D)
+```
+
+
+**Delete all observations with missing data**
+
+There is some missing data for the following variables: ESG, RETvalue, TNAvalue, AGE. For my analysis it is fine to work with an unbalanced panel. Therefore I will delete all observation with missing data. However, First I will analyse whether there are some important differences between funds with missing ESG values. 
+
+```{r}
+#create a dummy variable to compare funds with missing ESG values and those without.
+total$missing <- ifelse(is.na(total$ESGvalue), 1, 0)
+
+table(total['missing'])
+```
+
+There are 249,511 observations left after deleting observations with missing ESG values. The number of observations with missing ESG values is 57,773 . 
+
+```{r}
+#Observe differences in the other variables
+total %>%
+  group_by(missing) %>%
+  summarise(meanRET = mean(RETvalue, na.rm=TRUE),
+            meanTNA = mean(TNAvalue, na.rm=TRUE),
+            meanAGE = mean(Age, na.rm=TRUE),
+            meanEU = mean(EU, na.rm=TRUE)
+            )
+```
+The observations with missing ESG data seem to have comparable Return and Age data. However, on average they tend to be smaller. This would suggests that is less available for  smaller funds. For now, I must assume that this does not influence the results of the analysis. A larger share of the missing value comes from the treatment group. 
+
+Considering that I will also use covariates in my analysis, I will also drop observations with missing values for those variables. 
+
+```{r}
+total %>% drop_na()
+```
+As a result of this I lose another7,326,302 observations, which is a significant loss of observations. However, I must assume that there is no relationship between the missing data and the intervention effect. 
+
+```{r}
+totalclean <- total %>% drop_na()
+```
+
+**Give each variable the proper datatype**
+
+```{r}
+#Transform dichotomous and ordinal data to factor datatype
+totalclean$Month <- as.factor(totalclean$Month)
+totalclean$Year <- as.factor(totalclean$Year)
+totalclean$ESGvalue <- as.factor(totalclean$ESGvalue)
+totalclean$treatment <- as.factor(totalclean$treatment)
+totalclean$anticipation <- as.factor(totalclean$anticipation)
+totalclean$treatment1 <- as.factor(totalclean$treatment1)
+totalclean$treatment2 <- as.factor(totalclean$treatment2)
+totalclean$EU <- as.factor(totalclean$EU)
+
+#Drop unnecessary variables
+totalclean = subset(totalclean, select=-c(missing))
+```
+
+**all variables for the analysis**
+
+```{r}
+#Create Difference in Differences indicator
+totalclean$DIDindicator <- ifelse(totalclean$treatment==1 & totalclean$EU==1, 1, 0)
+totalclean$DIDindicator <- as.factor(totalclean$DIDindicator)
+
+totalclean$DIDanticipation <- ifelse(totalclean$anticipation==1 & totalclean$EU==1, 1, 0)
+totalclean$DIDanticipation <- as.factor(totalclean$DIDanticipation)
+
+totalclean$DIDindicator_p1 <- ifelse(totalclean$treatment1==1 & totalclean$EU==1, 1, 0)
+totalclean$DIDindicator_p1 <- as.factor(totalclean$DIDindicator_p1)
+
+totalclean$DIDindicator_p2 <- ifelse(totalclean$treatment2==1 & totalclean$EU==1, 1, 0)
+totalclean$DIDindicator_p2 <- as.factor(totalclean$DIDindicator_p2)
+```
+
+```{r}
+#create group fixed effects 
+totalclean$GFE_t <- ifelse(totalclean$EU==1, 1, 0)
+totalclean$GFE_c <- ifelse(totalclean$EU==0, 1, 0)
+
+totalclean$GFE_t <- as.factor(totalclean$GFE_t)
+totalclean$GFE_c <- as.factor(totalclean$GFE_c)
+```
+
+```{r}
+#create TFE effects factor
+
+totalclean <- totalclean[totalclean$Date != '2018-08-28',]
+totalclean <- totalclean[totalclean$Date != '2018-09-28',]
+
+totalclean$start_month <- (totalclean$start_month = '2018-10-28')   #make first month 0!
+totalclean$start_month <- as.Date(totalclean$start_month, format = "%Y-%m-%d")
+
+totalclean$TFE <- interval(totalclean$start_month, totalclean$Date) %/% months(1) 
+
+totalclean$TFE <- as.factor(totalclean$TFE)
+
+totalclean = subset(totalclean, select=-c(start_month))
+```
+
+**Finish data cleaning data set**
+
+'totalclean' is the cleaned dataset. I will use this to conduct the analysis. 
+
+##Summary statistics
+
+*Summary statistics of the variables* 
+
+```{r}
+#Number of observations for both treatment and control gorup
+table(totalclean['EU'])
+```
+
+```{r}
+#Number of observations for both post = 0 and post=1
+table(totalclean['treatment'])
+```
+
+```{r}
+#Mean values of numerical variables per group per period
+totalclean %>%
+  group_by(EU, treatment) %>%
+  summarise(meanFundSize = mean(FundSize), meanRET = mean(RETvalue), meanAGE = mean(Age))
+```
+
+The treatment groups seem to be quite similar in terms of these variables.
+
+```{r}
+#Count of the manipulated ESG scores for both treatment and control group before and after the intervention
+plot1 <- ggplot(subset(totalclean, treatment %in% 0), 
+                aes(x=ESGvalue, fill=EU, color=EU)) +
+  geom_bar(position="dodge") + 
+  ggtitle("Before intervention")
+plot2 <- ggplot(subset(totalclean, treatment %in% 1), 
+                aes(x=ESGvalue, fill=EU, color=EU)) +
+  geom_bar(position="dodge") + 
+  ggtitle("After intervention")
+
+grid.arrange(plot1, plot2, ncol=1, nrow=2)
+```
+
+
+*Histogram of covariates* 
+
+```{r}
+#Histogram of all numeric variables
+hist(totalclean$RETvalue)
+hist(totalclean$Age)
+hist(totalclean$TNAvalue)
+hist(totalclean$FundSize)
+```
+
+```{r}
+#Transform variables to logarithms 
+totalclean <- totalclean %>%
+  mutate(logTNAvalue = log(TNAvalue)) %>%
+  mutate(logRETvalue = log(RETvalue+1-min(RETvalue))) %>%
+  mutate(logAGE = log(Age)) %>%
+  mutate(logFundSize = log(FundSize))
+
+#source on transform RET to postives & on why logs 'https://blogs.sas.com/content/iml/2011/04/27/
+#log-transformations-how-to-handle-negative-data-values.html'
+```
+
+```{r}
+#Histogram of all numeric variables
+hist(totalclean$logTNAvalue)
+hist(totalclean$logRETvalue)
+hist(totalclean$logAGE)
+hist(totalclean$logFundSize)
+```
+
+*Density plots * 
+
+```{r}
+#Density plots of numeric variables
+A<-density(totalclean$logAGE)
+B<-density(totalclean$logTNAvalue)
+C<-density(totalclean$logRETvalue)
+D<-density(totalclean$logFundSize)
+plot(A)
+plot(B)
+plot(C)
+plot(D)
+```
+
+*Descriptive statistics*
+
+```{r}
+#descriptive statistics of key variables
+describe(totalclean[,c("ESGvalue", "RETvalue", "TNAvalue", "Age", "FundSize")], check=TRUE,IQR=FALSE,omit=TRUE)
+```
+
+
+```{r}
+totalclean <- totalclean[totalclean$age != 0, ]
+totalclean <- totalclean[totalclean$Age != 0, ]
+```
+
+
+```{r}
+#descriptive statistics of key variables
+describe(totalclean[,c("logTNAvalue", "logRETvalue", "logAGE", "logFundSize")], check=TRUE,IQR=FALSE,omit=TRUE)
+
+summary(totalclean[,c("FundSize", "RETvalue", "Age", "ESGvalue")],)
+```
+There seems to be problem on the lower bound of the data for the variable logTNAvalue. By observing the data it appears that for a few cases the TNA value is noted as 0.00 which is an issue for the calculation of logTNA. Since a TNA value of 0.00 does not make sense for my analysis, I will remove the observations with this value. 
+
+```{r}
+totalclean <- totalclean[totalclean$TNAvalue != 0, ]
+totalclean <- totalclean[totalclean$FundSize != 0, ]
+totalclean <- totalclean[totalclean$FundSize > 1000000, ]
+```
+
+##Graph
+
+```{r}
+#Graph of the manipulated ESG score before and after the treatment with ESG scores as a numeric variable
+totalclean$ESGvalue = as.numeric(totalclean$ESGvalue)
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU)) +
+stat_summary(geom = 'line') +
+geom_vline(xintercept = 3, color = "blue", size=0.5) + 
+theme_minimal()
+```
+
+```{r}
+#ESG score back to factor
+totalclean$ESGvalue = as.factor(totalclean$ESGvalue)
+```
+
+```{r}
+#Graph of the manipulated ESG score before and after the treatment with ESG scores as a numeric variable
+totalclean$ESGvalue = as.numeric(totalclean$ESGvalue)
+totalclean$TFE = as.numeric(totalclean$TFE)
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU)) +
+stat_summary(fun.y = mean,
+               fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom = "pointrange"
+             ) +
+#geom_vline(xintercept = "2019-06-28", color = "blue", size=0.5) + 
+#geom_vline(xintercept = "2019-12-28", color = "red", size=0.5) + 
+theme_minimal()
+```
+
+```{r}
+date_range <- which(totalclean$Date %in% as.Date(
+  c('2019-05-28', "2019-11-28")) )
+
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU)) +
+stat_summary(fun.y = mean,
+               fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom = "pointrange"
+             ) +
+geom_vline(xintercept = as.numeric(totalclean$Date[date_range]),
+             color = "black", linetype=4)+
+   ylim(1, 5)
+theme_minimal()
+```
+
+```{r}
+date_range <- which(totalclean$Date %in% as.Date(
+  c('2019-05-28', "2019-11-28")) )
+
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU)) +
+stat_summary(fun.y = mean,
+               fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom = "pointrange"
+             ) +
+geom_vline(xintercept=as.numeric(totalclean$Date[7.8]), linetype=4)
+theme_minimal()
+```
+
+
+
+
+
+##Prior
+
+Outcome of previous paper: 0.019 & 0.027 rating grades, with weak statistical evidence (frequentist). Therefore I set a prior at of a positive outcome with a lot of uncertainty. 
+
+```{r}
+plot_informative <- ggplot() +
+  stat_function(fun = dnorm, args = list(mean = 0.03, sd = 0.5),
+                geom = "area", fill = "grey80", color = "black") +
+  xlim(-4, 4) +
+  labs(title = "Uncertain but positive prior", subtitle = "Normal(mean = 0.03, sd = 0.5)",
+       caption = "I expect θ to be around 0.03")
+
+plot_informative
+```
+
+
+```{r}
+#set prior - Source: https://evalf21.classes.andrewheiss.com/resource/bayes/#resources
+prior1 <- c(
+  prior(normal(0.03, 0.5), class = "b", coef = "DIDindicator1")
+  )
+
+prior2 <- c(
+  prior(normal(0.03, 0.5), class = "b", coef = "DIDindicator_p11")
+  )
+
+prior2 <- c(
+  prior(normal(0.03, 0.5), class = "b", coef = "DIDindicator_p21")
+  )
+
+prior2 <- c(
+  prior(normal(0.03, 0.5), class = "b", coef = "DIDanticipation1")
+  )
+```
+
+##Regressions part 1: anticipation period
+
+```{r}
+#first turn ESG score into an ordered factor: 
+totalclean$ESGvalue = as.factor(totalclean$ESGvalue)
+totalclean$ESGvalue = ordered(totalclean$ESGvalue,levels = c(1,2,3,4,5))
+
+print(is.ordered(totalclean$ESGvalue)) ##test whether it is ordered
+```
+
+```{r}
+#Create dataset for anticipation period regressions
+totalclean_LongIntervention <- totalclean[totalclean$Date != '2019-06-28',]
+totalclean_LongIntervention <- totalclean_LongIntervention[totalclean_LongIntervention$Date != '2019-07-28',]
+totalclean_LongIntervention <- totalclean_LongIntervention[totalclean_LongIntervention$Date != '2019-08-28',]
+totalclean_LongIntervention <- totalclean_LongIntervention[totalclean_LongIntervention$Date != '2019-09-28',]
+totalclean_LongIntervention <- totalclean_LongIntervention[totalclean_LongIntervention$Date != '2019-10-28',]
+totalclean_LongIntervention <- totalclean_LongIntervention[totalclean_LongIntervention$Date != '2019-11-28',]
+```
+
+
+```{r} 
+#Reg1: no weights, no covariates, long intevention period, 1 treatment variable, MLM
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model101 <- brm(
+  formula = ESGvalue ~ 1 + DIDindicator + (1|GFE_t) + TFE,   
+  data = totalclean_LongIntervention, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+saveRDS(fit_model101, "fit_model101.rds")
+
+}else{
+  fit_model101 <- readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/fit_model101.rds") #path has changed so I just copied in the location of the files quickly before uploading the file to github.     
+}
+
+summary(fit_model101)
+```
+
+
+```{r} 
+#Reg2: no weights, 3 covariates, long intervention period, 1 treatment variable, MLM
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model102 <- brm(
+  formula = ESGvalue ~ 1 + DIDindicator + (1|GFE_t) + TFE + logRETvalue + logAGE + logFundSize,   
+  data = totalclean_LongIntervention, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+saveRDS(fit_model102, "fit_model102.rds")
+
+}else{
+  fit_model102 <- readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/fit_model102.rds")
+}
+
+summary(fit_model102)
+```
+
+```{r} 
+#Reg2: weights, 0 covariates, long intervention period, 1 treatment variable, MLM
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model103 <- brm(
+  formula = ESGvalue | weights(logFundSize) ~ 1 + DIDindicator + (1|GFE_t) + TFE,   
+  data = totalclean_LongIntervention, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+saveRDS(fit_model103, "fit_model103.rds")
+
+}else{
+  fit_model103 <- readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/fit_model103.rds")
+}
+
+summary(fit_model103)
+```
+
+```{r} 
+#Reg2: no weights, 3 covariates, long intervention period, 1 treatment variable, MLM
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model104 <- brm(
+  formula = ESGvalue | weights(logFundSize) ~ 1 + DIDindicator + (1|GFE_t) + TFE + logRETvalue + logAGE + logFundSize,   
+  data = totalclean_LongIntervention, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+#saveRDS(fit_model104, "fit_model104.rds")
+
+}else{
+  #fit_model104 <- readRDS("fit_model104.rds")
+}
+
+#summary(fit_model104)
+```
+
+
+```{r} 
+#Reg2: no weights, 3 covariates, long intervention period, 1 treatment variable, MLM
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model1404 <- brm(
+  formula = ESGvalue | weights(FundSize) ~ 1 + DIDindicator + (1|GFE_t) + TFE,   
+  data = totalclean_LongIntervention, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+saveRDS(fit_model1404, "fit_model1404.rds")
+
+}else{
+  #fit_model1404 <- readRDS("fit_model1404.rds")
+}
+
+#summary(fit_model1404)
+```
+
+
+##Regressions part 2: multiperiods
+
+```{r}
+#Create dataset for multiperiods regressors
+totalclean_DTE <- totalclean
+```
+
+```{r} 
+#Apply the previous model in the new setting 
+
+fullrun <-0
+
+if(fullrun){
+  
+fit_model105 <- brm(
+  formula = ESGvalue ~ 1 + DIDanticipation + DIDindicator_p1 + DIDindicator_p2 + (1|GFE_t) + TFE,   
+  data = totalclean_DTE, 
+  family = cumulative ("probit"), #this defines the distribution of the ESG variable, which is the specific ordinal model to be used and the transformation to be applied to the predictor term.By specifying cumulative(probit) I apply a cumulative model assuming the latent variable (raw ESG) scores to be normally distributed.This follows from the methodological statements made by morningstar
+  prior = prior2, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+)
+
+saveRDS(fit_model105, "fit_model105.rds")
+
+}else{
+  fit_model105 <- readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/fit_model105.rds")
+}
+
+summary(fit_model105)
+```
+
+
+##Regressions part 3: Category-specific effects
+
+```{r} 
+
+fullrun <- 0
+
+if(fullrun){
+  
+fit_model106 <- brm(
+  formula = ESGvalue ~ 1 + cs(DIDindicator) + (1|GFE_t) + TFE,   
+  data = totalclean_LongIntervention, 
+  family = acat ("probit"), 
+  prior = prior1, 
+  chains = 4, iter = 2000, cores = 4, seed = 222, backend = "cmdstanr", silent=TRUE
+  )
+saveRDS(fit_model106, "fit_model106.rds")
+
+}else{
+  fit_model106 <- readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/fit_model106.rds")
+}
+
+summary(fit_model106)
+```
+
+## other plots
+
+```{r}
+date_range <- which(totalclean$Date %in% as.Date(
+  c('2019-05-28', "2019-11-28")) )
+
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU)) +
+stat_summary(fun.y = mean,
+               fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom = "pointrange"
+             ) +
+geom_vline(xintercept = as.numeric(totalclean$Date[date_range]),
+             color = "black", linetype=4)+
+   #ylim(1, 5)+
+  ggtitle('Figure 1: Average ESG value for treatment and control group over time') + 
+  #labs(caption = "The bars represent one standard deviation above and one below the average for each group for each date.") 
+theme_minimal()
+```
+
+
+```{r}
+date_range <- which(totalclean$Date %in% as.Date(
+  c('2019-05-28', "2019-11-28")) )
+
+ggplot(totalclean, aes(x = Date, y = ESGvalue, group=EU, color=EU, weight =logFundSize)) +
+stat_summary(fun.y = mean,
+               fun.ymin = function(x) mean(x) - sd(x), 
+               fun.ymax = function(x) mean(x) + sd(x), 
+               geom = "pointrange"
+             ) +
+geom_vline(xintercept = as.numeric(totalclean$Date[date_range]),
+             color = "black", linetype=4)+
+  ggtitle('Figure X: Average ESG value weighted on FundSize for treatment and control group over time') + 
+   #ylim(1, 5)
+theme_minimal()
+```
+
+
+```{r}
+stargazer(totalclean, type="html",
+          keep=c("ESGvalue", "FundSize", "Age", "RETvalue"), 
+          out="/Users/maxsiers/Desktop/summary.html")
+```
+
+```{r}
+totalcleanEU <- subset(totalclean, EU == 1)
+totalcleanEU$FundSize2 = totalcleanEU$FundSize/1000000
+totalcleanUS <- subset(totalclean, EU == 0)
+totalcleanUS$FundSize2 = totalcleanUS$FundSize/1000000
+```
+
+```{r}
+stargazer(totalcleanEU, type="text",
+          keep=c("ESGvalue", "FundSize2", "Age", "RETvalue", "logRETvalue", "logAGE", "LogFundSize"),
+          summary.stat = c("n", "mean", "median", "sd", "min", "p25", "p75", "max"))
+```
+```{r}
+stargazer(totalcleanUS, type="text",
+          keep=c("ESGvalue", "FundSize2", "Age", "RETvalue", "logRETvalue", "logAGE", "LogFundSize"),
+          summary.stat = c("n", "mean", "median", "sd", "min", "p25", "p75", "max"))
+```
+
+```{r}
+#number of funds in EU and US
+n_distinct(totalcleanEU$ISIN)
+```
+```{r}
+#number of funds in EU and US
+n_distinct(totalcleanUS$ISIN)
+```
+
+```{r}
+matched<-readRDS("/Users/maxsiers/Desktop/MSc Thesis Tilburg University/MSc Thesis modellen/matched.rds")
+matchedfile <- match.data(matched)
+```
+
+```{r} 
+#matched summary statistics
+matchedfileEU <- subset(matchedfile, EU == 1)
+matchedfileEU$FundSize2 = matchedfileEU$FundSize/1000000
+matchedfileUS <- subset(matchedfile, EU == 0)
+matchedfileUS$FundSize2 = matchedfileUS$FundSize/1000000
+```
+
+```{r}
+stargazer(matchedfileEU, type="text",
+          keep=c("ESGvalue", "FundSize2", "Age", "RETvalue", "logRETvalue", "logAGE", "LogFundSize"),
+          summary.stat = c("n", "mean", "median", "sd", "min", "p25", "p75", "max"))
+```
+
+```{r}
+stargazer(matchedfileUS, type="text",
+          keep=c("ESGvalue", "FundSize2", "Age", "RETvalue", "logRETvalue", "logAGE", "LogFundSize"),
+          summary.stat = c("n", "mean", "median", "sd", "min", "p25", "p75", "max"))
+```
+
+```{r}
+#Count of the manipulated ESG scores for both treatment and control group before and after the intervention
+plot1 <- ggplot(subset(totalclean, treatment %in% 0), 
+                aes(x=ESGvalue, fill=EU, color=EU)) +
+  geom_bar(position="dodge") + 
+  ggtitle("Before intervention")
+plot2 <- ggplot(subset(totalclean, treatment %in% 1), 
+                aes(x=ESGvalue, fill=EU, color=EU)) +
+  geom_bar(position="dodge") + 
+  ggtitle("After intervention")
+
+grid.arrange(plot1, plot2, ncol=1, nrow=2) 
+```
+
+
+```{r}
+#Density plots of numeric variables
+Age_density<-density(totalclean$Age)
+logAge_density<-density(totalclean$logAGE)
+
+RET_density <- density(totalclean$RETvalue)
+logRET_density <- density(totalclean$logRETvalue)
+
+FundSize_density <- density(totalclean$FundSize)
+logFundSize_density <- density(totalclean$logFundSize)
+
+par(mfrow=c(3,2))
+plot(Age_density, main = "Density plot variable Age")
+plot(logAge_density, main = "Density plot variable logAge")
+plot(RET_density, main = "Density plot variable Return")
+plot(logRET_density, main = "Density plot variable logReturns")
+plot(FundSize_density, main = "Density plot variable FundSize")
+plot(logFundSize_density, main = "Density plot variable logFundSize")
+```
+
+
+##Graphs results
+
+```{r} 
+#posterior predict, differences between counterfactual and truth for the treatment group
+#    predictionmodel1<- totalclean_LongIntervention[totalclean_LongIntervention$treatment != 0,]
+#    predictionmodel1 <- predictionmodel1[predictionmodel1$GFE_t != 0,]
+    
+#    data_sim_t0 <- predictionmodel1 %>% mutate (DIDindicator = 0)
+#    data_sim_t1 <- predictionmodel1 %>% mutate (DIDindicator = 1)
+    
+#    posteriorpredict_t0 <- posterior_predict(fit_model101, newdata = data_sim_t0)
+#    posteriorpredict_t1 <- posterior_predict(fit_model101, newdata = data_sim_t1)
+    
+#    diff <- posteriorpredict_t1 - posteriorpredict_t0
+    
+#    dim(diff)
+#    saveRDS(diff, "diff.rds")
+```
+
+```{r} 
+#    ATE_per_draw <- apply(diff, 1, mean)
+```
+
+```{r} 
+#    ggplot(data.frame(ATE_per_draw), aes(x=ATE_per_draw)) + 
+#      geom_histogram() +
+#      geom_vline(xintercept = mean(ATE_per_draw), col = "red") +
+#      ggtitle ("Figure X: Posterior distribution of the ATE following model 1") + 
+#      xlab("Average Treatment Effect")
+```
+
+```{r}
+#    ATE <- data.frame(ATE_per_draw) %>%
+#      mutate(counter = ifelse(ATE_per_draw > 0.10, 1, 0)) 
+
+#    mean(ATE$counter) * 100
+```
+
+```{r}
+#    ATE <- data.frame(ATE_per_draw) %>%
+#      mutate(counter = ifelse(ATE_per_draw > 0.0, 1, 0)) 
+
+#    mean(ATE$counter) * 100
+```
+
+```{r}
+#Plotting the estimated relationship
+marginal_effects(fit_model101, "DIDindicator", categorical = TRUE)
+```
+
+```{r}
+#Analyse the posterio draws for the Difference in Differences indicator
+posterior_draws1 <- fit_model105 %>% 
+  gather_draws(c(b_DIDanticipation1, b_DIDindicator_p11, b_DIDindicator_p21))
+
+ggplot(posterior_draws1, aes(x = .value, y = fct_rev(.variable), fill = .variable)) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye(.width = c(0.65, 0.95), alpha = 0.8, point_interval = "median_hdi") +
+  guides(fill = "none") +
+  ggtitle("Figure X: Posterior distributions of the treatment variables following model 4")+
+  labs(x = "Coefficient", y = "Variables",
+       caption = "65% and 95% credible intervals shown in black")+
+  theme_minimal()
+  
+```
+
+```{r}
+#Analyse the posterio draws for the Difference in Differences indicator
+posterior_draws2 <- fit_model108 %>% 
+  gather_draws(c(b_Placebotest11))
+
+ggplot(posterior_draws2, aes(x = .value, y = fct_rev(.variable), fill = .variable)) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye(.width = c(0.65, 0.95), alpha = 0.8, point_interval = "median_hdi") +
+  guides(fill = "none") +
+  ggtitle("Figure X: Posterior distribution of placebo test 1")+
+  labs(x = "Coefficient", y = "Variable",
+       caption = "65% and 95% credible intervals shown in black")
+```
+
+```{r}
+#Analyse the posterio draws for the Difference in Differences indicator
+posterior_draws3 <- fit_model109 %>% 
+  gather_draws(c(b_Placebotest21))
+
+ggplot(posterior_draws3, aes(x = .value, y = fct_rev(.variable), fill = .variable)) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye(.width = c(0.65, 0.95), alpha = 0.8, point_interval = "median_hdi") +
+  guides(fill = "none") +
+  ggtitle("Figure X: Posterior distribution of placebo test 2")+
+  labs(x = "Coefficient", y = "Variable",
+       caption = "65% and 95% credible intervals shown in black")
+```
+
+```{r}
+#Analyse the posterio draws for the Difference in Differences indicator
+posterior_draws4 <- fit_model110 %>% 
+  gather_draws(c(b_Placebotest31))
+
+ggplot(posterior_draws4, aes(x = .value, y = fct_rev(.variable), fill = .variable)) +
+  geom_vline(xintercept = 0) +
+  stat_halfeye(.width = c(0.65, 0.95), alpha = 0.8, point_interval = "median_hdi") +
+  guides(fill = "none") +
+  ggtitle("Figure X: Posterior distribution of placebo test 3")+
+  labs(x = "Coefficient", y = "Variable",
+       caption = "65% and 95% credible intervals shown in black")
+```
+
+
